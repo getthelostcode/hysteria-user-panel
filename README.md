@@ -5,6 +5,16 @@ Points 在服务商之间按「多少 Points = 1GB」的定价结算。本工程
 
 > 平台运营后台、服务商后台 **不在本工程范围内**。
 
+**相关仓库**
+
+| 仓库 | 作用 |
+|---|---|
+| [`hysteria-node-agent`](https://github.com/getthelostcode/hysteria-node-agent) | 节点侧客户端（拉踢人列表 + 上报流量）；其 `sql/` 目录是本平台**数据库 DDL 的权威来源** |
+| [`hysteria-server`](https://github.com/getthelostcode/hysteria-server) | Hysteria 2 服务端 + 流量采集 |
+
+本仓库 `database/schema/hysteria_schema.sql` 即从 `hysteria-node-agent/sql/01..06` 原样搬运，
+只增不改；Laravel 侧的增量字段写在 `database/migrations/` 里。
+
 ---
 
 ## 1. 技术栈与版本
@@ -17,6 +27,10 @@ Points 在服务商之间按「多少 Points = 1GB」的定价结算。本工程
 | MySQL | **8.0.43**（架构师 DDL，`utf8mb4_0900_ai_ci` + `DATETIME(6)`） | |
 | Redis | 7.x（session / cache / queue） | 需要 `phpredis` 扩展 |
 | 前端 | Filament 自带 UI（Livewire 3 + Alpine + Tailwind） | 不引入 Vue/React |
+
+> **分支说明**：`master` = Laravel 11.57.0（按技术栈要求）。
+> 分支 `chore/laravel-12` = Laravel 12.69.3（修复 4 条安全公告，零代码改动，测试同样 29 passed），
+> 详见 [§7 安全公告](#7-安全公告务必处理)。
 
 ---
 
