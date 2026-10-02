@@ -178,7 +178,38 @@ curl -s  http://127.0.0.1:8088/user/login | grep -c Hysteria
 
 ---
 
-## 7. 未包含 / 后续
+## 7. 安全公告（务必处理）
+
+`composer audit` 对 **laravel/framework v11.57.0** 报出 4 条安全公告，且 **Laravel 11 已 EOL**，
+11.x 分支没有补丁版本（11.57.0 就是 11.x 的最后一版）：
+
+| CVE / 公告 | 标题 | 影响范围 | 本工程实际暴露面 |
+|---|---|---|---|
+| CVE-2026-48019 | CRLF injection in default email rule | `>=11.0.0,<12.0.0` | 我们用了 `->email()` 规则；仅在开启邮箱验证并发信时可被利用 |
+| CVE-2026-102279 | XSS in Debug Page Information | `<12.69.0` | 需 `APP_DEBUG=true` 且触发异常页；生产应关闭 |
+| GHSA-crmm-hgp2-wgrp | Temporary Signed URL Path Confusion | `<12.61.1` | 本工程不使用签名 URL，不适用 |
+| GHSA-5vg9-5847-vvmq | CRLF injection in default email rule（同一问题） | `>=11.0.0,<12.0.0` | 同上 |
+
+**已验证的修复路径**（分支 `chore/laravel-12`，零代码改动）：
+
+```bash
+composer audit          # 升级前：Found 4 security vulnerability advisories
+git checkout chore/laravel-12
+php artisan test        # 29 passed (125 assertions)
+composer audit          # 升级后：No security vulnerability advisories found
+```
+
+`master` 保持 Laravel 11 以满足技术栈要求；要采纳修复，执行：
+
+```bash
+git checkout master && git merge chore/laravel-12 && composer install
+```
+
+（Filament v3.3.55 的约束是 `illuminate/* ^10.45|^11.0|^12.0|^13.0`，直升 12/13 都是官方支持范围。）
+
+---
+
+## 8. 未包含 / 后续
 
 - ❌ 平台运营后台（服务商审核、定价管理、抽成配置、对账）
 - ❌ 服务商后台
