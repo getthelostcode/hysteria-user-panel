@@ -6,6 +6,7 @@ use App\Filament\User\Resources\UsageLedgerResource\Pages;
 use App\Models\UsageLedger;
 use App\Support\Bytes;
 use App\Support\Decimal;
+use App\Support\StatusBadge;
 use Filament\Forms\Components\DatePicker;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -70,45 +71,46 @@ class UsageLedgerResource extends Resource
 
                 Tables\Columns\TextColumn::make('billable_gb')
                     ->label('计费流量')
-                    ->state(fn (UsageLedger $record) => Decimal::group($record->billable_gb, 4))
+                    ->state(fn (UsageLedger $record) => Decimal::points($record->billable_gb, 4, ' GB'))
                     ->description(fn (UsageLedger $record) => '上行 '.Bytes::human($record->upload_bytes).' / 下行 '.Bytes::human($record->download_bytes))
                     ->alignRight(),
 
                 Tables\Columns\TextColumn::make('points_per_gb')
                     ->label('单价')
-                    ->state(fn (UsageLedger $record) => rtrim(rtrim((string) $record->points_per_gb, '0'), '.').' P/GB')
+                    ->state(fn (UsageLedger $record) => Decimal::points($record->points_per_gb, 4, ' P/GB'))
                     ->description(fn (UsageLedger $record) => '系数 ↑'.$record->upload_ratio.' ↓'.$record->download_ratio)
                     ->alignRight(),
 
                 Tables\Columns\TextColumn::make('user_points_amount')
                     ->label('扣除 Points')
-                    ->formatStateUsing(fn ($state) => Decimal::group($state, 8))
+                    ->state(fn (UsageLedger $record) => Decimal::points($record->user_points_amount, 8, ''))
+                    ->suffix(' Points')
                     ->weight('bold')
                     ->color('danger')
                     ->alignRight(),
 
                 Tables\Columns\TextColumn::make('platform_points_amount')
                     ->label('平台抽成')
-                    ->formatStateUsing(fn ($state, UsageLedger $record) => Decimal::group($state, 8).' ('.rtrim(rtrim((string) $record->platform_commission_rate, '0'), '.').')')
+                    ->state(fn (UsageLedger $record) => Decimal::points($record->platform_points_amount, 8, ''))
+                    ->suffix(' Points')
+                    ->description(fn (UsageLedger $record) => '比例 '.rtrim(rtrim((string) $record->platform_commission_rate, '0'), '.'))
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->alignRight(),
 
                 Tables\Columns\TextColumn::make('provider_points_amount')
                     ->label('服务商应得')
-                    ->formatStateUsing(fn ($state) => Decimal::group($state, 8))
+                    ->state(fn (UsageLedger $record) => Decimal::points($record->provider_points_amount, 8, ''))
+                    ->suffix(' Points')
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->alignRight(),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('状态')
                     ->badge()
-                    ->formatStateUsing(fn (string $state) => UsageLedger::statusLabels()[$state] ?? $state)
-                    ->color(fn (string $state) => match ($state) {
-                        UsageLedger::STATUS_CHARGED => 'success',
-                        UsageLedger::STATUS_PENDING => 'warning',
-                        UsageLedger::STATUS_REVERSED, UsageLedger::STATUS_FAILED => 'danger',
-                        default => 'gray',
-                    }),
+                    // 文字 + 图标 + 颜色三重表达
+                    ->formatStateUsing(fn (string $state) => StatusBadge::usage($state)['label'])
+                    ->color(fn (string $state) => StatusBadge::usage($state)['color'])
+                    ->icon(fn (string $state) => StatusBadge::usage($state)['icon']),
             ])
             ->filters([
                 SelectFilter::make('provider_id')

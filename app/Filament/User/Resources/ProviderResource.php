@@ -5,6 +5,8 @@ namespace App\Filament\User\Resources;
 use App\Actions\SwitchProviderAction;
 use App\Filament\User\Resources\ProviderResource\Pages;
 use App\Models\Provider;
+use App\Support\Decimal;
+use App\Support\StatusBadge;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -66,8 +68,10 @@ class ProviderResource extends Resource
                 Tables\Columns\TextColumn::make('status')
                     ->label('状态')
                     ->badge()
-                    ->formatStateUsing(fn (string $state) => Provider::statusLabels()[$state] ?? $state)
-                    ->color('success'),
+                    // 文字 + 图标 + 颜色三重表达
+                    ->formatStateUsing(fn (string $state) => StatusBadge::provider($state)['label'])
+                    ->color(fn (string $state) => StatusBadge::provider($state)['color'])
+                    ->icon(fn (string $state) => StatusBadge::provider($state)['icon']),
 
                 Tables\Columns\TextColumn::make('nodes_count')
                     ->label('可用节点数')
@@ -80,9 +84,10 @@ class ProviderResource extends Resource
 
                 Tables\Columns\TextColumn::make('current')
                     ->label('当前使用')
-                    ->state(fn (Provider $record) => $record->id === $currentProviderId ? '使用中' : '')
+                    ->state(fn (Provider $record) => $record->id === $currentProviderId ? '使用中' : '未使用')
                     ->badge()
-                    ->color('primary'),
+                    ->icon(fn (Provider $record) => $record->id === $currentProviderId ? 'heroicon-m-check-badge' : 'heroicon-m-minus-small')
+                    ->color(fn (Provider $record) => $record->id === $currentProviderId ? 'success' : 'gray'),
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('has_nodes')
@@ -113,7 +118,7 @@ class ProviderResource extends Resource
                     ->disabled(fn (Provider $record) => $record->id === $currentProviderId)
                     ->requiresConfirmation()
                     ->modalHeading(fn (Provider $record) => '切换到 '.$record->name)
-                    ->modalDescription('切换后：新流量按新服务商的价格计费；已产生的旧流量仍然归原服务商结算。')
+                    ->modalDescription('切换后新流量按新服务商计费，旧流量仍归旧服务商。')
                     ->modalSubmitActionLabel('确认切换')
                     ->action(function (Provider $record): void {
                         try {

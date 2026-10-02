@@ -5,7 +5,7 @@
 @endphp
 
 <x-filament-panels::page>
-    <div class="grid gap-4 md:grid-cols-2">
+    <div class="hv-grid hv-grid-2">
         @forelse ($this->providers() as $provider)
             @php $isCurrent = $provider->id === $currentProviderId; @endphp
 

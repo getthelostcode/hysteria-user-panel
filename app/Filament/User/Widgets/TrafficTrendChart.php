@@ -43,12 +43,13 @@ class TrafficTrendChart extends ChartWidget
         $data = app(UsageStatistics::class)->dailyTraffic(auth()->user(), $days);
 
         return [
+            // 流量趋势统一使用 info 语义色（下行深、上行浅，靠图例与数值区分）
             'datasets' => [
                 [
                     'label' => '下行 (GB)',
                     'data' => $data['download'],
-                    'borderColor' => '#6366f1',
-                    'backgroundColor' => 'rgba(99, 102, 241, 0.15)',
+                    'borderColor' => '#0ea5e9',              // info-500
+                    'backgroundColor' => 'rgba(14, 165, 233, 0.16)',
                     'fill' => true,
                     'tension' => 0.3,
                     'pointRadius' => 0,
@@ -56,8 +57,8 @@ class TrafficTrendChart extends ChartWidget
                 [
                     'label' => '上行 (GB)',
                     'data' => $data['upload'],
-                    'borderColor' => '#10b981',
-                    'backgroundColor' => 'rgba(16, 185, 129, 0.12)',
+                    'borderColor' => '#7dd3fc',              // info-300
+                    'backgroundColor' => 'rgba(125, 211, 252, 0.12)',
                     'fill' => true,
                     'tension' => 0.3,
                     'pointRadius' => 0,

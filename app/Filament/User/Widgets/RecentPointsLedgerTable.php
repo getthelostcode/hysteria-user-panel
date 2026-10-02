@@ -4,6 +4,7 @@ namespace App\Filament\User\Widgets;
 
 use App\Models\UserPointsLedger;
 use App\Support\Decimal;
+use App\Support\StatusBadge;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
@@ -40,24 +41,23 @@ class RecentPointsLedgerTable extends TableWidget
                 Tables\Columns\TextColumn::make('biz_type')
                     ->label('类型')
                     ->badge()
-                    ->formatStateUsing(fn (string $state) => UserPointsLedger::bizTypeLabels()[$state] ?? $state)
-                    ->color(fn (string $state) => match ($state) {
-                        UserPointsLedger::BIZ_RECHARGE => 'success',
-                        UserPointsLedger::BIZ_USAGE => 'warning',
-                        UserPointsLedger::BIZ_REVERSAL, UserPointsLedger::BIZ_REFUND => 'danger',
-                        default => 'gray',
-                    }),
+                    // 文字 + 图标 + 颜色三重表达
+                    ->formatStateUsing(fn (string $state) => StatusBadge::pointsLedger($state)['label'])
+                    ->color(fn (string $state) => StatusBadge::pointsLedger($state)['color'])
+                    ->icon(fn (string $state) => StatusBadge::pointsLedger($state)['icon']),
 
                 Tables\Columns\TextColumn::make('signed_amount')
                     ->label('变动')
                     ->state(fn (UserPointsLedger $record) => $record->signedAmount())
-                    ->formatStateUsing(fn (string $state) => (str_starts_with($state, '-') ? '' : '+').Decimal::group($state, 8))
+                    ->suffix(' Points')
+                    ->formatStateUsing(fn (string $state) => (str_starts_with($state, '-') ? '-' : '+').Decimal::points(ltrim($state, '-'), 8, ''))
                     ->color(fn (UserPointsLedger $record) => $record->isCredit() ? 'success' : 'danger')
                     ->weight('bold'),
 
                 Tables\Columns\TextColumn::make('balance_after')
                     ->label('余额')
-                    ->formatStateUsing(fn ($state) => Decimal::group($state, 8)),
+                    ->state(fn (UserPointsLedger $record) => Decimal::points($record->balance_after, 8, ''))
+                    ->suffix(' Points'),
 
                 Tables\Columns\TextColumn::make('remark')
                     ->label('备注')

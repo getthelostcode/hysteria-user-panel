@@ -23,7 +23,7 @@
         </x-filament::section>
     @else
         <x-filament::section heading="连接信息">
-            <div class="grid gap-4 md:grid-cols-3">
+            <div class="hv-grid hv-grid-3">
                 <div>
                     <div class="text-sm text-gray-500 dark:text-gray-400">服务商</div>
                     <div class="mt-1 font-semibold">{{ $config->provider?->name }}</div>
@@ -63,7 +63,7 @@
         </x-filament::section>
 
         <x-filament::section heading="客户端配置（可直接粘贴到 mihomo / sing-box / Hysteria 客户端）">
-            <pre x-ref="cfg" class="overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs leading-relaxed text-gray-100">{{ $config->toYaml() }}</pre>
+            <pre x-ref="cfg" class="hv-code">{{ $config->toYaml() }}</pre>
 
             <div class="mt-3 flex gap-2">
                 <x-filament::button

@@ -4,6 +4,7 @@ namespace App\Filament\User\Resources;
 
 use App\Filament\User\Resources\PointsPackageResource\Pages;
 use App\Models\PointsPackage;
+use App\Support\Decimal;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -57,19 +58,21 @@ class PointsPackageResource extends Resource
 
                 Tables\Columns\TextColumn::make('base_points')
                     ->label('基础 Points')
-                    ->formatStateUsing(fn ($state) => rtrim(rtrim((string) $state, '0'), '.')),
+                    ->state(fn (PointsPackage $record) => Decimal::points($record->base_points, 2, ''))
+                    ->suffix(' Points'),
 
                 Tables\Columns\TextColumn::make('bonus_points')
                     ->label('赠送')
                     ->badge()
+                    ->icon('heroicon-m-gift')
                     ->color('success')
-                    ->formatStateUsing(fn ($state) => bccomp((string) $state, '0', 8) > 0
-                        ? '+'.rtrim(rtrim((string) $state, '0'), '.')
-                        : '—'),
+                    ->state(fn (PointsPackage $record) => bccomp((string) $record->bonus_points, '0', 8) > 0
+                        ? Decimal::points($record->bonus_points, 2, ' Points')
+                        : '无赠送'),
 
                 Tables\Columns\TextColumn::make('price_amount')
                     ->label('售价')
-                    ->formatStateUsing(fn ($state, PointsPackage $record) => rtrim(rtrim((string) $state, '0'), '.').' '.$record->currency),
+                    ->state(fn (PointsPackage $record) => Decimal::points($record->price_amount, 2, '').' '.$record->currency),
 
                 Tables\Columns\TextColumn::make('points_per_currency')
                     ->label('性价比')
@@ -86,10 +89,10 @@ class PointsPackageResource extends Resource
                     ->requiresConfirmation()
                     ->modalHeading(fn (PointsPackage $record) => '确认购买「'.$record->name.'」')
                     ->modalDescription(fn (PointsPackage $record) => sprintf(
-                        '将支付 %s %s，到账 %s Points（本工程为模拟支付，确认后立即到账）。',
-                        rtrim(rtrim((string) $record->price_amount, '0'), '.'),
+                        '将支付 %s %s，到账 %s（模拟支付，确认后立即入账）。',
+                        Decimal::points($record->price_amount, 2, ''),
                         $record->currency,
-                        rtrim(rtrim($record->totalPoints(), '0'), '.'),
+                        Decimal::points($record->totalPoints(), 2),
                     ))
                     ->modalSubmitActionLabel('确认支付')
                     ->action(function (PointsPackage $record): void {
@@ -100,7 +103,12 @@ class PointsPackageResource extends Resource
 
                             Notification::make()
                                 ->title('购买成功')
-                                ->body(sprintf('订单 %s 已支付，到账 %s Points。', $order->order_no, rtrim(rtrim((string) $order->points_amount, '0'), '.')))
+                                ->body(sprintf(
+                                    '订单 %s 已支付，到账 %s，当前余额 %s。',
+                                    $order->order_no,
+                                    Decimal::points($order->points_amount, 2),
+                                    Decimal::points(auth()->user()->fresh()->pointsBalance(), 2),
+                                ))
                                 ->success()
                                 ->send();
                         } catch (ValidationException $exception) {

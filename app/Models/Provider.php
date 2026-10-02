@@ -91,6 +91,8 @@ class Provider extends Model
     {
         $min = $this->minPointsPerGb();
 
-        return $min === null ? '暂未定价' : rtrim(rtrim((string) $min, '0'), '.').' Points/GB 起';
+        return $min === null
+            ? '暂未定价'
+            : \App\Support\Decimal::points($min, 4, ' Points/GB 起');
     }
 }

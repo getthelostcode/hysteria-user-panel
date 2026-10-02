@@ -5,6 +5,7 @@ namespace App\Filament\User\Resources;
 use App\Filament\User\Resources\PointsOrderResource\Pages;
 use App\Models\PointsOrder;
 use App\Support\Decimal;
+use App\Support\StatusBadge;
 use Filament\Forms\Components\DatePicker;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -62,23 +63,21 @@ class PointsOrderResource extends Resource
 
                 Tables\Columns\TextColumn::make('points_amount')
                     ->label('到账 Points')
-                    ->formatStateUsing(fn ($state) => Decimal::group($state, 8))
+                    ->state(fn (PointsOrder $record) => Decimal::points($record->points_amount, 2, ''))
+                    ->suffix(' Points')
                     ->weight('bold'),
 
                 Tables\Columns\TextColumn::make('fiat_amount')
                     ->label('支付金额')
-                    ->formatStateUsing(fn ($state, PointsOrder $record) => Decimal::group($state, 2).' '.$record->fiat_currency),
+                    ->state(fn (PointsOrder $record) => Decimal::points($record->fiat_amount, 2, '').' '.$record->fiat_currency),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('状态')
                     ->badge()
-                    ->formatStateUsing(fn (string $state) => PointsOrder::statusLabels()[$state] ?? $state)
-                    ->color(fn (string $state) => match ($state) {
-                        PointsOrder::STATUS_PAID => 'success',
-                        PointsOrder::STATUS_PENDING => 'warning',
-                        PointsOrder::STATUS_FAILED => 'danger',
-                        default => 'gray',
-                    }),
+                    // 文字 + 图标 + 颜色三重表达
+                    ->formatStateUsing(fn (string $state) => StatusBadge::order($state)['label'])
+                    ->color(fn (string $state) => StatusBadge::order($state)['color'])
+                    ->icon(fn (string $state) => StatusBadge::order($state)['icon']),
 
                 Tables\Columns\TextColumn::make('paid_at')
                     ->label('支付时间(UTC)')

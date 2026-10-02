@@ -4,6 +4,7 @@ namespace App\Filament\User\Resources;
 
 use App\Filament\User\Resources\UserProviderBindingResource\Pages;
 use App\Models\UserProviderBinding;
+use App\Support\StatusBadge;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -62,13 +63,10 @@ class UserProviderBindingResource extends Resource
                 Tables\Columns\TextColumn::make('status')
                     ->label('状态')
                     ->badge()
-                    ->formatStateUsing(fn (string $state) => UserProviderBinding::statusLabels()[$state] ?? $state)
-                    ->color(fn (string $state) => match ($state) {
-                        UserProviderBinding::STATUS_ACTIVE => 'success',
-                        UserProviderBinding::STATUS_PENDING => 'warning',
-                        UserProviderBinding::STATUS_SUSPENDED => 'danger',
-                        default => 'gray',
-                    }),
+                    // 文字 + 图标 + 颜色三重表达
+                    ->formatStateUsing(fn (string $state) => StatusBadge::binding($state)['label'])
+                    ->color(fn (string $state) => StatusBadge::binding($state)['color'])
+                    ->icon(fn (string $state) => StatusBadge::binding($state)['icon']),
 
                 Tables\Columns\TextColumn::make('effective_from')
                     ->label('生效起(UTC)')

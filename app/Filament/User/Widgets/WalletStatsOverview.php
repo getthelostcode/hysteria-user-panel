@@ -39,26 +39,32 @@ class WalletStatsOverview extends StatsOverviewWidget
         }
 
         return [
-            Stat::make('当前积分余额', Decimal::group($balance, 2))
-                ->description('可用 '.Decimal::group($available, 2).' Points')
+            // 积分余额 → primary（品牌主色）
+            Stat::make('当前积分余额', Decimal::points($balance, 2))
+                ->description('可用 '.Decimal::points($available, 2))
                 ->descriptionIcon('heroicon-m-wallet')
                 ->color('primary'),
 
+            // 本月流量 → info
             Stat::make('本月流量', Bytes::human($traffic['total']))
                 ->description(sprintf('上行 %s / 下行 %s', Bytes::human($traffic['upload']), Bytes::human($traffic['download'])))
                 ->descriptionIcon('heroicon-m-arrow-trending-up')
-                ->color('success'),
+                ->color('info'),
 
-            Stat::make('本月消费', Decimal::group($consumed, 2).' P')
+            // 本月消费 → warning（带 7 天走势）
+            Stat::make('本月消费', Decimal::points($consumed, 2))
                 ->description($stats->monthlyBilledCount($user).' 条计费记录')
                 ->descriptionIcon('heroicon-m-receipt-percent')
                 ->chart($trend)
                 ->color('warning'),
 
+            // 当前服务商 → success
             Stat::make('当前服务商', $provider?->name ?? '未选择')
-                ->description($provider ? '绑定于 '.($user->currentBinding()?->effective_from?->format('Y-m-d H:i') ?? '—') : '去「切换服务商」选择')
-                ->descriptionIcon('heroicon-m-server-stack')
-                ->color($provider ? 'primary' : 'gray'),
+                ->description($provider
+                    ? '绑定于 '.($user->currentBinding()?->effective_from?->format('Y-m-d H:i') ?? '—')
+                    : '去「切换服务商」选择')
+                ->descriptionIcon($provider ? 'heroicon-m-check-badge' : 'heroicon-m-question-mark-circle')
+                ->color($provider ? 'success' : 'gray'),
         ];
     }
 }

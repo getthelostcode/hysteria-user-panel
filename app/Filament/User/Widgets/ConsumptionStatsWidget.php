@@ -41,24 +41,28 @@ class ConsumptionStatsWidget extends StatsOverviewWidget
             ->count();
 
         return [
+            // 本月流量 → info
             Stat::make('本月流量', Bytes::human($traffic['total']))
                 ->description('1 GB = 1024³ bytes')
                 ->descriptionIcon('heroicon-m-arrow-path')
-                ->color('primary'),
+                ->color('info'),
 
-            Stat::make('本月消费', Decimal::group($consumed, 2).' P')
+            // 本月消费 → warning
+            Stat::make('本月消费', Decimal::points($consumed, 2))
                 ->description('按计费明细汇总（不含红冲）')
                 ->descriptionIcon('heroicon-m-banknotes')
                 ->color('warning'),
 
+            // 当前服务商 → success
             Stat::make('当前服务商', $provider?->name ?? '未选择')
                 ->description($provider?->priceHint() ?? '尚未绑定服务商')
-                ->descriptionIcon('heroicon-m-server-stack')
+                ->descriptionIcon($provider ? 'heroicon-m-check-badge' : 'heroicon-m-question-mark-circle')
                 ->color($provider ? 'success' : 'gray'),
 
+            // 待计费 → 有积压时警告色，否则灰色
             Stat::make('待计费流量', Bytes::human($pendingBytes))
-                ->description($pendingCount.' 个小时桶等待计费')
-                ->descriptionIcon('heroicon-m-clock')
+                ->description($pendingCount > 0 ? $pendingCount.' 个小时桶等待计费' : '暂无待计费流量')
+                ->descriptionIcon($pendingCount > 0 ? 'heroicon-m-clock' : 'heroicon-m-check-circle')
                 ->color($pendingCount > 0 ? 'warning' : 'gray'),
         ];
     }

@@ -107,6 +107,26 @@ final class Decimal
     }
 
     /**
+     * 展示用 Points 格式：千分位 + 去掉无意义的尾随 0 + 统一后缀。
+     *
+     *   points('1000.00000000')            → "1,000 Points"
+     *   points('1234.50000000', 2)         → "1,234.5 Points"
+     *   points('3.13426171', 8)            → "3.13426171 Points"   ← 流水用 8 位，保留精确值
+     *
+     * 注意：全程字符串运算，不经过 float；精度需求高的地方（账本流水）传 8 位。
+     */
+    public static function points(string|int|float|null $value, int $decimals = 2, string $suffix = ' Points'): string
+    {
+        $formatted = self::group($value, $decimals);
+
+        if ($decimals > 0 && str_contains($formatted, '.')) {
+            $formatted = rtrim(rtrim($formatted, '0'), '.');
+        }
+
+        return $formatted.$suffix;
+    }
+
+    /**
      * 统一成 bcmath 能接受的字符串。
      * 注意：float 入参本身已是有损的，只允许出现在「展示层解包」的场景，
      * 计费链路必须传字符串（MySQL DECIMAL 经 PDO 取出即为字符串）。

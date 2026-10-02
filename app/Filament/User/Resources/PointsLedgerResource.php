@@ -5,6 +5,7 @@ namespace App\Filament\User\Resources;
 use App\Filament\User\Resources\PointsLedgerResource\Pages;
 use App\Models\UserPointsLedger;
 use App\Support\Decimal;
+use App\Support\StatusBadge;
 use Filament\Forms\Components\DatePicker;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -63,25 +64,22 @@ class PointsLedgerResource extends Resource
                 Tables\Columns\TextColumn::make('biz_type')
                     ->label('类型')
                     ->badge()
-                    ->formatStateUsing(fn (string $state) => UserPointsLedger::bizTypeLabels()[$state] ?? $state)
-                    ->color(fn (string $state) => match ($state) {
-                        UserPointsLedger::BIZ_RECHARGE => 'success',
-                        UserPointsLedger::BIZ_USAGE => 'warning',
-                        UserPointsLedger::BIZ_REVERSAL, UserPointsLedger::BIZ_REFUND => 'danger',
-                        default => 'gray',
-                    }),
+                    // 文字 + 图标 + 颜色三重表达（不允许只靠颜色）
+                    ->formatStateUsing(fn (string $state) => StatusBadge::pointsLedger($state)['label'])
+                    ->color(fn (string $state) => StatusBadge::pointsLedger($state)['color'])
+                    ->icon(fn (string $state) => StatusBadge::pointsLedger($state)['icon']),
 
                 Tables\Columns\TextColumn::make('signed_amount')
                     ->label('变动 Points')
                     ->state(fn (UserPointsLedger $record) => $record->signedAmount())
-                    // 用字符串千分位格式化，绝不经过 float
-                    ->formatStateUsing(fn (string $state) => (str_starts_with($state, '-') ? '' : '+').Decimal::group($state, 8))
+                    // 账本用 8 位小数保留精确值；千分位 + 去尾零，全程字符串运算不经过 float
+                    ->formatStateUsing(fn (string $state) => (str_starts_with($state, '-') ? '-' : '+').Decimal::points(ltrim($state, '-'), 8, ''))
                     ->color(fn (UserPointsLedger $record) => $record->isCredit() ? 'success' : 'danger')
                     ->weight('bold'),
 
                 Tables\Columns\TextColumn::make('balance_after')
                     ->label('变动后余额')
-                    ->formatStateUsing(fn ($state) => Decimal::group($state, 8))
+                    ->formatStateUsing(fn ($state) => Decimal::points($state, 8, ''))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('remark')
@@ -105,7 +103,6 @@ class PointsLedgerResource extends Resource
                         UserPointsLedger::DIRECTION_CREDIT => '收入',
                         UserPointsLedger::DIRECTION_DEBIT => '支出',
                     ]),
-
                 Filter::make('created_at')
                     ->label('时间区间')
                     ->form([

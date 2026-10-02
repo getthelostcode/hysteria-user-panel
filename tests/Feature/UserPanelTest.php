@@ -272,7 +272,8 @@ class UserPanelTest extends TestCase
         $this->actingAs($user);
 
         Livewire::test(MyWallet::class)
-            ->assertSee('1,000.00')
+            ->assertSee('1,000')                       // 千分位（去尾零，不显示 .00）
+            ->assertSee('Points')
             ->assertSee('钱包缓存与账本一致');
     }
 

@@ -5,6 +5,7 @@ namespace App\Filament\User\Resources;
 use App\Filament\User\Resources\TrafficUsageResource\Pages;
 use App\Models\TrafficUsageHourly;
 use App\Support\Bytes;
+use App\Support\StatusBadge;
 use Filament\Forms\Components\DatePicker;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -86,19 +87,10 @@ class TrafficUsageResource extends Resource
                 Tables\Columns\TextColumn::make('billed_status')
                     ->label('计费状态')
                     ->badge()
-                    ->formatStateUsing(fn (string $state) => match ($state) {
-                        'billed' => '已计费',
-                        'pending' => '待计费',
-                        'skipped' => '已跳过',
-                        'failed' => '计费失败',
-                        default => $state,
-                    })
-                    ->color(fn (string $state) => match ($state) {
-                        'billed' => 'success',
-                        'pending' => 'warning',
-                        'failed' => 'danger',
-                        default => 'gray',
-                    }),
+                    // 文字 + 图标 + 颜色三重表达
+                    ->formatStateUsing(fn (string $state) => StatusBadge::traffic($state)['label'])
+                    ->color(fn (string $state) => StatusBadge::traffic($state)['color'])
+                    ->icon(fn (string $state) => StatusBadge::traffic($state)['icon']),
             ])
             ->filters([
                 SelectFilter::make('provider_id')

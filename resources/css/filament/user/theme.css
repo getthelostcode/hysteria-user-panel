@@ -1,0 +1,139 @@
+/* ==========================================================================
+   Hysteria VPN 用户中心 · Filament v3 独立主题
+   —— 通过 UserPanelProvider::viteTheme() 注册，只作用于 user 面板；
+   —— 不修改 vendor/filament 任何文件，平台后台 / 服务商后台有各自主题，互不影响。
+   —— 构建：npm run build（产物在 public/build，由 Vite manifest 管理）
+   ========================================================================== */
+
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@config 'tailwind.config.js';
+
+/* --------------------------------------------------------------------------
+   设计令牌：圆角、阴影、间距统一在这里改，页面里不再各写一套
+   -------------------------------------------------------------------------- */
+@layer base {
+    :root {
+        --hv-radius-card: 1rem;
+        --hv-radius-chip: 9999px;
+        --hv-gap: 1.25rem;
+        --hv-shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 12px 32px -20px rgb(15 23 42 / 0.28);
+        --hv-shadow-card-hover: 0 2px 4px 0 rgb(15 23 42 / 0.05), 0 18px 40px -24px rgb(15 23 42 / 0.35);
+    }
+
+    /* 暗黑模式下的阴影需要更"实"一点，否则卡片边界看不清 */
+    .dark {
+        --hv-shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.45), 0 14px 36px -22px rgb(0 0 0 / 0.85);
+        --hv-shadow-card-hover: 0 2px 6px 0 rgb(0 0 0 / 0.5), 0 20px 44px -24px rgb(0 0 0 / 0.9);
+    }
+}
+
+@layer components {
+    /* ---- 卡片：圆角 / 阴影 / 悬浮反馈 统一 ---- */
+    .fi-section,
+    .fi-wi-stats-overview-stat,
+    .fi-ta-ctn,
+    .fi-wi-chart,
+    .fi-wi-table {
+        border-radius: var(--hv-radius-card);
+        box-shadow: var(--hv-shadow-card);
+        transition: box-shadow 0.2s ease;
+    }
+
+    .fi-wi-stats-overview-stat:hover {
+        box-shadow: var(--hv-shadow-card-hover);
+    }
+
+    /* ---- 指标卡：数字用等宽数字，避免跳动 ---- */
+    .fi-wi-stats-overview-stat-value {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+    }
+
+    .fi-wi-stats-overview-stat-label {
+        font-weight: 500;
+    }
+
+    /* ---- 表格：小屏横向滚动而不是挤压列 ---- */
+    .fi-ta-content {
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .fi-ta-table {
+        min-width: 640px; /* 桌面端本来就宽于此，只在窄屏生效 */
+    }
+
+    /* ---- 代码块（我的连接） ---- */
+    .hv-code {
+        @apply overflow-x-auto rounded-xl border border-white/10 bg-gray-950 p-4 text-xs leading-relaxed text-gray-100;
+        font-variant-ligatures: none;
+    }
+
+    .dark .hv-code {
+        @apply border-white/10 bg-black/70;
+    }
+
+    /* ---- 通用卡片栅格：默认单列，md 起分列 ---- */
+    .hv-grid {
+        display: grid;
+        gap: var(--hv-gap);
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    @media (min-width: 768px) {
+        .hv-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .hv-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .hv-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+
+    /* ---- 指标块（我的积分页） ---- */
+    .hv-metric {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    .hv-metric-label {
+        @apply text-sm text-gray-500 dark:text-gray-400;
+    }
+
+    .hv-metric-unit {
+        @apply ml-1 text-xs font-normal text-gray-400;
+    }
+
+    /* ---- 状态徽章：颜色 + 图标 + 文字三重表达（不允许只靠颜色） ---- */
+    .fi-badge .fi-badge-icon {
+        @apply h-4 w-4;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   移动端适配：单列堆叠、侧边栏与工具栏不溢出
+   -------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+    .fi-wi-stats-overview-stats-ctn {
+        gap: 0.75rem;
+    }
+
+    .fi-wi-stats-overview-stat {
+        padding: 1rem;
+    }
+
+    .fi-section {
+        padding: 1rem;
+    }
+
+    .fi-header {
+        gap: 0.75rem;
+    }
+
+    .fi-ta-header-toolbar {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    /* 移动端图表高度收紧，避免占满整屏 */
+    .fi-wi-chart-canvas-ctn {
+        min-height: 220px;
+    }
+}
