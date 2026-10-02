@@ -251,10 +251,15 @@ public/build/assets/app-*.js              51.52 kB
 
 ```bash
 php artisan make:filament-theme user   # ✓ 主题骨架已生成
-npm install                            # ✓ 149 packages（注意 NODE_ENV=production 需加 --include=dev）
+npm install --include=dev              # ✓ 149 packages
 npm run build                          # ✓ vite v6.4.3，0 error
 php artisan optimize:clear             # ✓
 ```
+
+> **构建环境两个坑（都踩过）**
+> 1. 本机 `NODE_ENV=production`，npm 会**静默跳过 devDependencies**（表现为 `up to date in 2s` 却只有 8 个目录）——必须加 `--include=dev`。
+> 2. `make:filament-theme` 会写入 `postcss-nesting@^14`，它要求 **Node ≥ 20.19**，在 Node 18 上会报 `EBADENGINE`。
+>    已把它锁到 `postcss-nesting@^13.0`（`engines: >=18`），干净重装后 **0 条 EBADENGINE**，且主题产物字节级一致（同 hash `theme-D6ehCEXT.css`，112.85 kB）。
 
 | 验收项 | 结果 |
 |---|---|
