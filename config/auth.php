@@ -40,6 +40,17 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        /*
+         * 服务商后台专用 guard：与用户端 web guard 完全隔离。
+         * 两个 guard 各自在 session 里有独立的登录键，因此「同一个浏览器同时登录
+         * 用户面板和服务商后台」互不影响；ProviderPanelProvider 通过 authGuard('provider')
+         * 绑定本 guard，服务商后台的任何 auth()->user() 都是 ProviderUser。
+         */
+        'provider' => [
+            'driver' => 'session',
+            'provider' => 'provider_users',
+        ],
     ],
 
     /*
@@ -63,6 +74,12 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', App\Models\User::class),
+        ],
+
+        // 服务商后台操作员（独立表，独立模型，绝不与用户端混用）
+        'provider_users' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\ProviderUser::class,
         ],
 
         // 'users' => [

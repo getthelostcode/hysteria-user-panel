@@ -107,6 +107,52 @@ final class StatusBadge
         };
     }
 
+    /** 服务商 Points 账本业务类型 */
+    public static function providerLedger(string $bizType): array
+    {
+        return match ($bizType) {
+            'usage_earning' => self::make('流量应得', 'success', 'heroicon-m-arrow-down-tray'),
+            'settlement' => self::make('结算转出', 'warning', 'heroicon-m-arrow-up-tray'),
+            'adjust' => self::make('人工调整', 'gray', 'heroicon-m-wrench-screwdriver'),
+            'reversal' => self::make('红冲', 'danger', 'heroicon-m-arrow-path'),
+            default => self::make($bizType, 'gray', 'heroicon-m-question-mark-circle'),
+        };
+    }
+
+    /** 结算单状态 */
+    public static function settlement(string $status): array
+    {
+        return match ($status) {
+            'draft' => self::make('草稿', 'gray', 'heroicon-m-pencil-square'),
+            'pending' => self::make('待审核', 'warning', 'heroicon-m-clock'),
+            'approved' => self::make('已批准', 'info', 'heroicon-m-check-badge'),
+            'paid' => self::make('已打款', 'success', 'heroicon-m-banknotes'),
+            'failed' => self::make('失败', 'danger', 'heroicon-m-x-circle'),
+            'cancelled' => self::make('已取消', 'gray', 'heroicon-m-no-symbol'),
+            default => self::make($status, 'gray', 'heroicon-m-question-mark-circle'),
+        };
+    }
+
+    /** 定价规则状态 */
+    public static function pricingRule(string $status): array
+    {
+        return match ($status) {
+            'active' => self::make('生效', 'success', 'heroicon-m-check-circle'),
+            'inactive' => self::make('停用', 'gray', 'heroicon-m-pause-circle'),
+            default => self::make($status, 'gray', 'heroicon-m-question-mark-circle'),
+        };
+    }
+
+    /** 服务商账号状态 */
+    public static function providerUser(string $status): array
+    {
+        return match ($status) {
+            'active' => self::make('正常', 'success', 'heroicon-m-check-badge'),
+            'disabled' => self::make('已禁用', 'gray', 'heroicon-m-no-symbol'),
+            default => self::make($status, 'gray', 'heroicon-m-question-mark-circle'),
+        };
+    }
+
     /** 节点状态 */
     public static function node(string $status): array
     {

@@ -50,9 +50,15 @@ class AppServiceProvider extends ServiceProvider
             return; // 只有 MySQL 需要（sqlite 等场景不影响）
         }
 
-        $connection->setQueryGrammar(new class($connection) extends MySqlGrammar {
+        $connection->setQueryGrammar(tap(new class extends MySqlGrammar {
             /** @var string 绑定参数的时间格式：保留微秒，与 DATETIME(6) 对齐 */
             protected $dateFormat = 'Y-m-d H:i:s.u';
-        });
+        }, function (MySqlGrammar $grammar) use ($connection): void {
+            // 必须显式注入连接：Illuminate\Database\Grammar 没有构造函数，
+            // 不注入的话 $this->connection 为 null，escape() 会抛
+            // "The database driver's grammar implementation does not support escaping values."
+            // —— 直接影响 QueryException 的错误信息与 toRawSql()，会把真实 SQL 报错盖掉。
+            $grammar->setConnection($connection);
+        }));
     }
 }

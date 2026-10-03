@@ -67,6 +67,12 @@ class ProviderPricingRule extends Model
         return $query->where('status', 'active');
     }
 
+    /** 限定服务商（服务商后台的所有查询都必须带上它） */
+    public function scopeOfProvider(Builder $query, int $providerId): Builder
+    {
+        return $query->where('provider_id', $providerId);
+    }
+
     /** 生效时间落在 [effective_from, effective_to) */
     public function scopeEffectiveAt(Builder $query, \DateTimeInterface|string $at): Builder
     {

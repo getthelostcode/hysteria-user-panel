@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             DemoPlatformSeeder::class,   // 服务商 / 节点 / 定价 / 结算条款 / 积分套餐
+            DemoProviderSeeder::class,   // 服务商后台登录账号（provider_users）
             DemoUserSeeder::class,       // 演示用户 + 绑定 + 流量 + 购买 + 计费
         ]);
     }
