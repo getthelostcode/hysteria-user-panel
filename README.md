@@ -30,10 +30,10 @@ Points 在服务商之间按「多少 Points = 1GB」的定价结算。
 |---|---|---|
 | PHP | **8.2**（实测 8.2.33） | 需要 `pdo_mysql` `bcmath` `intl` `redis` `zip` |
 | Laravel | **11.x** | 配置走 `bootstrap/`，无 `Http/Middleware` 骨架 |
-| Filament | **v3.3.55** | Panel id = `user`，路径 `/user` |
-| MySQL | **8.0.43**（架构师 DDL，`utf8mb4_0900_ai_ci` + `DATETIME(6)`） | |
+| Filament | **v3.3.55** | 两个面板：`user` → `/user`（用户中心）、`provider` → `/provider`（服务商后台，启用 tenancy） |
+| MySQL | **8.0.43**（架构师 DDL，`utf8mb4_0900_ai_ci` + `DATETIME(6)`） | 19 张基础表 + 增量建 1 张 `provider_users` |
 | Redis | 7.x（session / cache / queue） | 需要 `phpredis` 扩展 |
-| 前端 | Filament 自带 UI（Livewire 3 + Alpine + Tailwind）+ Blade | 不引入 Vue/React；user 面板有独立主题（见 §7） |
+| 前端 | Filament 自带 UI（Livewire 3 + Alpine + Tailwind）+ Blade | 不引入 Vue/React；**两个面板各有一份独立 vite 主题**（见 §7） |
 | Node / npm | Node 18+ / npm 9+（实测 18.20.4 / 9.2.0） | 仅用于 `npm run build` 编译主题；构建非 PHP 运行必需 |
 
 > **分支说明**：`master` = Laravel 11.57.0（按技术栈要求）。
@@ -51,7 +51,9 @@ cp .env.example .env && php artisan key:generate
 # 建库：先跑「架构师 DDL」，再跑 Laravel 补充迁移
 mysql -uroot -e "CREATE DATABASE hysteria DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
 mysql -uroot hysteria < database/schema/hysteria_schema.sql   # 19 张基础表
-php artisan migrate                                          # 只补 remember_token / email_verified_at
+php artisan migrate                                          # 增量：users 认证字段 + provider_users 表
+
+npm install --include=dev && npm run build                    # 编译两份面板主题（缺这步页面会因 manifest 缺失报错）
 
 php artisan db:seed                                          # 演示数据
 php artisan serve --port=8088                                # 8000 端口可能被其它服务占用
@@ -80,15 +82,23 @@ database/migrations/2026_10_02_000001_add_laravel_auth_columns_to_users.php
     users 补齐 Laravel 认证所需字段：remember_token、email_verified_at
     密码列沿用 password_hash，不新增冗余的 password 列
     （映射由 App\Models\User::getAuthPassword() + password 属性写入口完成）
+database/migrations/2026_10_03_000001_create_provider_users_table.php
+    新建服务商后台登录账号表 provider_users（架构师 DDL 里没有这张表，属增量）
+    字段：provider_id / name / email / password / status / remember_token / last_login_at + DATETIME(6)
+    外键 provider_id → providers(id) ON DELETE CASCADE；唯一键 email
+    幂等：表已存在则跳过（Schema::hasTable 守卫）
 ```
 
 | 表 | 关键语义 |
 |---|---|
 | `users` | **不存 current_provider_id**；当前服务商由 `user_provider_bindings` 的 active 记录推导 |
+| `provider_users` | **增量表**：服务商后台的登录主体，硬绑定 `provider_id`（数据隔离的根）；密码列用标准 `password`，哈希只在 Action/Seeder 里做一次 |
 | `user_provider_bindings` | `active_binding_key` 生成列 + `uk_user_active_binding` 保证「一人一 active」；区间 `[effective_from, effective_to)` |
-| `provider_pricing_rules` | 版本化定价：`node_id=NULL` 服务商默认价，非空为节点覆盖价；`priority`/`effective_from` 决定优先级 |
+| `provider_pricing_rules` | 版本化定价：`node_id=NULL` 服务商默认价，非空为节点覆盖价；`priority`/`effective_from` 决定优先级；**改价只新增 + 截断旧记录** |
+| `traffic_raw` | 按月分区表（无外键、主键 `(id, occurred_at)`）：查询必须直接比较 `occurred_at`，否则全分区扫描 |
 | `traffic_usage_hourly` | 小时聚合桶，唯一键 `(binding_id, node_id, period_start)`，UPSERT 幂等 |
 | `usage_ledger` | 计费明细，**费率快照**（points_per_gb / 系数 / 抽成比例），红冲修正 |
+| `provider_settlements` / `provider_settlement_items` | 结算单与明细；`uk_ps_provider_period` 防同区间重复结算，`uk_psi_usage` 防一条明细被结两次 |
 | `user_points_ledger` / `provider_points_ledger` | 不可变账本（`signed_amount` 生成列），钱包只是缓存 |
 
 ---
@@ -173,11 +183,32 @@ app/
         └── RecentUsageLedgerTable.php     最近 10 条计费明细
 ```
 
-服务商后台导航分组：**概览** / **节点管理** / **定价管理** / **流量与用户** / **收益** / **结算** / **设置**。
+**导航分组**
 
-导航分组：**资产**（我的积分 / 积分流水 / 购买积分 / 我的订单）、
-**服务**（服务商列表 / 切换服务商 / 我的绑定 / 我的连接）、
-**用量**（流量用量 / 计费明细）、**设置**（个人资料）。
+| 面板 | 分组 |
+|---|---|
+| 用户中心 | **资产**（我的积分 / 积分流水 / 购买积分 / 我的订单）、**服务**（服务商列表 / 切换服务商 / 我的绑定 / 我的连接）、**用量**（流量用量 / 计费明细）、**设置**（个人资料） |
+| 服务商后台 | **概览**、**节点管理**、**定价管理**、**流量与用户**、**收益**、**结算**、**设置** |
+
+**app/ 之外的新增文件**（不在上面的树里，但同样是交付内容）
+
+```
+bootstrap/providers.php                              注册两个 PanelProvider
+config/auth.php                                      新增 provider guard + provider_users provider
+database/migrations/2026_10_03_000001_create_provider_users_table.php
+database/seeders/DemoProviderSeeder.php              服务商后台演示账号（provider_users）
+resources/css/filament/user/theme.css                用户中心主题（vite 入口之一）
+resources/css/filament/user/tailwind.config.js        其 content 覆盖 app/Filament/User + views/filament/user
+resources/css/filament/provider/theme.css            服务商后台主题（vite 入口之一）
+resources/css/filament/provider/tailwind.config.js    其 content 覆盖 app/Filament/Provider + views/filament/provider
+resources/views/filament/provider/topbar-badge.blade.php   顶栏「服务商后台」标识
+resources/views/filament/provider/node-config.blade.php    节点服务端配置（.hv-code 代码块）
+resources/views/filament/provider/pages/                   流量排行页 + 3 个设置页的 Blade
+tests/Feature/ProviderPanelTest.php                  服务商后台业务与隔离（26 例）
+tests/Feature/ProviderPanelThemeTest.php             服务商后台主题与品牌（8 例）
+tests/Concerns/ProviderFixtures.php                  服务商账号夹具
+vite.config.js                                       两个主题入口
+```
 
 ---
 
@@ -212,6 +243,14 @@ curl -I http://127.0.0.1:8088/user        # 302 → /user/login
 curl -s  http://127.0.0.1:8088/user/login | grep -c Hysteria
 curl -I http://127.0.0.1:8088/provider    # 302 → /provider/login
 curl -s  http://127.0.0.1:8088/provider/login | grep -c '服务商后台'
+
+# 两个面板各引用自己那份主题产物（文件名从 manifest 取，重建后 hash 会变）
+php -r '$m=json_decode(file_get_contents("public/build/manifest.json"),true);
+  echo "user     -> ", $m["resources/css/filament/user/theme.css"]["file"], PHP_EOL,
+       "provider -> ", $m["resources/css/filament/provider/theme.css"]["file"], PHP_EOL;'
+curl -s http://127.0.0.1:8088/provider/login | grep -oE 'build/assets/theme-[A-Za-z0-9_-]+\.css'
+# 实测输出：user -> assets/theme-D6ehCEXT.css / provider -> assets/theme-DZ4iLoAc.css
+# 页面里的引用形如 build/assets/theme-DZ4iLoAc.css（provider 登录页）
 ```
 
 ---
