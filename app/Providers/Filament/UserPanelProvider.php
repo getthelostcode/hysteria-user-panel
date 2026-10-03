@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\User\Pages\Auth\EditProfile;
+use App\Filament\User\Pages\Auth\Login;
 use App\Filament\User\Pages\Auth\Register;
 use App\Filament\User\Pages\Dashboard;
 use App\Filament\User\UserPanelTheme;
@@ -45,7 +46,8 @@ class UserPanelProvider extends PanelProvider
             ->path('user')
 
             // ---- 认证：登录 / 注册 / 密码重置 / 个人资料 ----
-            ->login()
+            // 登录页自定义过跳转逻辑：只认本面板的 url.intended（详见 App\Filament\User\Pages\Auth\Login）
+            ->login(Login::class)
             ->registration(Register::class)           // 自定义注册页（多一个 username 字段）
             ->passwordReset()
             ->profile(EditProfile::class, isSimple: false)

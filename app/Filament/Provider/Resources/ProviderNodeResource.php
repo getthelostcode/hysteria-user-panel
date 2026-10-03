@@ -19,6 +19,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -192,6 +193,33 @@ class ProviderNodeResource extends Resource
     {
         return $table
             ->defaultSort('id', 'desc')
+            // 每个节点的当日/本月流量：用两次相关子查询一次取回，避免 N+1（节点数通常十几条）
+            ->modifyQueryUsing(function (Builder $query): Builder {
+                $stats = app(ProviderUsageStatistics::class);
+                [$todayFrom, $todayTo] = $stats->todayRange();
+                [$monthFrom, $monthTo] = $stats->monthRange();
+
+                return $query
+                    // 必须显式带上 provider_nodes.*：selectSub 会把 columns 从 null 变成非空，
+                    // 此时 Eloquent 的默认 `select *` 不再生效，模型会拿不到 id（列表直接 500）。
+                    ->select(['provider_nodes.*'])
+                    ->selectSub(
+                        fn ($sub) => $sub->from('traffic_usage_hourly')
+                            ->selectRaw('COALESCE(SUM(upload_bytes + download_bytes), 0)')
+                            ->whereColumn('node_id', 'provider_nodes.id')
+                            ->where('period_start', '>=', $todayFrom)
+                            ->where('period_start', '<', $todayTo),
+                        'today_bytes',
+                    )
+                    ->selectSub(
+                        fn ($sub) => $sub->from('traffic_usage_hourly')
+                            ->selectRaw('COALESCE(SUM(upload_bytes + download_bytes), 0)')
+                            ->whereColumn('node_id', 'provider_nodes.id')
+                            ->where('period_start', '>=', $monthFrom)
+                            ->where('period_start', '<', $monthTo),
+                        'month_bytes',
+                    );
+            })
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->label('节点')
@@ -222,6 +250,19 @@ class ProviderNodeResource extends Resource
                     ->color(fn (ProviderNode $record) => $record->isRecentlySeen() ? 'success' : 'danger')
                     ->sortable(),
 
+                // 每台服务器的流量：今日 + 本月（与计费同源，取自小时聚合表）
+                Tables\Columns\TextColumn::make('today_bytes')
+                    ->label('今日流量')
+                    ->state(fn (ProviderNode $record) => Bytes::human((int) ($record->today_bytes ?? 0)))
+                    ->alignEnd()
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('month_bytes')
+                    ->label('本月流量')
+                    ->state(fn (ProviderNode $record) => Bytes::human((int) ($record->month_bytes ?? 0)))
+                    ->alignEnd()
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('pricing_count')
                     ->label('定价规则')
                     ->counts('pricingRules')
@@ -232,6 +273,19 @@ class ProviderNodeResource extends Resource
                     ->label('状态')
                     ->options(ProviderNode::statusLabels())
                     ->multiple(),
+
+                // 运维视角：一眼分出「在线（10 分钟内有心跳）」与「离线/从未上报」
+                Tables\Filters\TernaryFilter::make('online')
+                    ->label('是否在线')
+                    ->placeholder('全部')
+                    ->trueLabel('在线')
+                    ->falseLabel('离线 / 未上报')
+                    ->queries(
+                        true: fn (Builder $q) => $q->where('last_seen_at', '>=', now()->subMinutes(10)),
+                        false: fn (Builder $q) => $q->where(fn (Builder $inner) => $inner
+                            ->whereNull('last_seen_at')
+                            ->orWhere('last_seen_at', '<', now()->subMinutes(10))),
+                    ),
 
                 Tables\Filters\SelectFilter::make('region')
                     ->label('区域')

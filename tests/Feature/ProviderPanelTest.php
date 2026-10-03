@@ -122,7 +122,7 @@ class ProviderPanelTest extends TestCase
         [$provider, , $account] = $this->makeTenant();
 
         // 走 Filament 的登录页（真实校验独立 guard + provider_users.password 列）
-        Livewire::test(\Filament\Pages\Auth\Login::class)
+        Livewire::test(\App\Filament\Provider\Pages\Auth\Login::class)
             ->fillForm(['email' => $account->email, 'password' => 'password'])
             ->call('authenticate')
             ->assertHasNoFormErrors();
@@ -137,12 +137,199 @@ class ProviderPanelTest extends TestCase
     {
         [, , $account] = $this->makeTenant();
 
-        Livewire::test(\Filament\Pages\Auth\Login::class)
+        Livewire::test(\App\Filament\Provider\Pages\Auth\Login::class)
             ->fillForm(['email' => $account->email, 'password' => 'wrong-password'])
             ->call('authenticate')
             ->assertHasFormErrors();
 
         $this->assertGuest('provider');
+    }
+
+    // -----------------------------------------------------------------
+    // 登录后的跳转目标（真实 bug：跨面板 url.intended 劫持）
+    // -----------------------------------------------------------------
+
+    /**
+     * 走**真实** Livewire 更新端点提交登录，返回 effects（与浏览器等价）。
+     *
+     * 刻意不用 Livewire::test()：它会免掉 persistent middleware 与真实 HTTP 语义，
+     * 「登录后跳到哪里」这类问题会被它掩盖（本次的跨面板劫持就是这么漏过去的）。
+     */
+    private function submitProviderLogin(string $email, string $password, ?string $intendedUrl = null): array
+    {
+        $session = ['_token' => 'test-token'];
+
+        if ($intendedUrl !== null) {
+            $session['url.intended'] = $intendedUrl;
+        }
+
+        $this->withSession($session);
+
+        $page = $this->get('/provider/login')->assertOk();
+
+        // 取登录组件自己的快照（页面里还有通知等其它 Livewire 组件）
+        $snapshot = null;
+
+        preg_match_all('/wire:snapshot="([^"]+)"/', $page->getContent(), $matches);
+
+        foreach ($matches[1] as $raw) {
+            $decoded = json_decode(html_entity_decode($raw, ENT_QUOTES), true);
+
+            if (is_array($decoded) && str_contains((string) ($decoded['memo']['name'] ?? ''), 'auth.login')) {
+                $snapshot = $decoded;
+                break;
+            }
+        }
+
+        $this->assertNotNull($snapshot, '登录页里没有找到登录组件的 Livewire 快照');
+
+        $response = $this->withHeaders([
+            'X-CSRF-TOKEN' => 'test-token',
+            'X-Livewire' => 'true',
+        ])->postJson('/livewire/update', [
+            'components' => [[
+                'snapshot' => json_encode($snapshot),
+                'updates' => ['data.email' => $email, 'data.password' => $password],
+                'calls' => [['path' => '', 'method' => 'authenticate', 'params' => []]],
+            ]],
+        ]);
+
+        $response->assertOk();
+
+        return (array) $response->json('components.0.effects', []);
+    }
+
+    public function test_服务商登录不会被用户面板残留的_intended_劫持(): void
+    {
+        [$provider, , $account] = $this->makeTenant();
+
+        /*
+         * 复现路径（真实环境已复现过）：
+         *  1) 同一浏览器先访问过用户面板（未登录）⇒ session 里留下 url.intended = /user；
+         *  2) 该浏览器到 /provider/xinglian 登录服务商后台；
+         *  3) Filament 的登录响应是 redirect()->intended(...)，而 url.intended 是**两个面板共享**的
+         *     session 键 ⇒ 登录后被送到 /user，再被用户面板弹到 /user/login。
+         *     （现象：服务商登录后错误跳转到 user/login）
+         */
+        $effects = $this->submitProviderLogin($account->email, 'password', url('/user'));
+
+        $redirect = (string) ($effects['redirect'] ?? '');
+        $redirectPath = (string) parse_url($redirect, PHP_URL_PATH);
+
+        $this->assertAuthenticatedAs($account, 'provider');
+        $this->assertStringStartsWith('/provider', $redirectPath, '登录后必须回到服务商后台，不能被用户面板的 intended 带走');
+        $this->assertStringNotContainsString('/user', $redirectPath);
+
+        // 跟随跳转能真正打开后台（不是被弹到登录页）
+        $this->get($redirectPath)->assertSuccessful();
+    }
+
+    public function test_服务商登录会保留本面板内的深链接(): void
+    {
+        [$provider, , $account] = $this->makeTenant();
+
+        $deep = url('/provider/'.$provider->code.'/provider-nodes');
+
+        $effects = $this->submitProviderLogin($account->email, 'password', $deep);
+
+        // 同一面板内的 intended（深链接）仍然生效：清掉的只有外面板的
+        $this->assertSame($deep, (string) ($effects['redirect'] ?? ''));
+    }
+
+    public function test_用户中心登录同样不会被服务商面板的_intended_劫持(): void
+    {
+        $user = $this->makeUser('u1', 'u1@example.com');
+
+        // 反向：session 里残留服务商面板的 intended
+        $this->withSession(['_token' => 'test-token', 'url.intended' => url('/provider/xinglian')]);
+
+        $page = $this->get('/user/login')->assertOk();
+
+        $snapshot = null;
+
+        preg_match_all('/wire:snapshot="([^"]+)"/', $page->getContent(), $matches);
+
+        foreach ($matches[1] as $raw) {
+            $decoded = json_decode(html_entity_decode($raw, ENT_QUOTES), true);
+
+            if (is_array($decoded) && str_contains((string) ($decoded['memo']['name'] ?? ''), 'auth.login')) {
+                $snapshot = $decoded;
+                break;
+            }
+        }
+
+        $this->assertNotNull($snapshot);
+
+        $response = $this->withHeaders(['X-CSRF-TOKEN' => 'test-token', 'X-Livewire' => 'true'])
+            ->postJson('/livewire/update', [
+                'components' => [[
+                    'snapshot' => json_encode($snapshot),
+                    'updates' => ['data.email' => 'u1@example.com', 'data.password' => 'password'],
+                    'calls' => [['path' => '', 'method' => 'authenticate', 'params' => []]],
+                ]],
+            ]);
+
+        $response->assertOk();
+
+        $redirect = (string) $response->json('components.0.effects.redirect', '');
+
+        $this->assertAuthenticatedAs($user, 'web');
+        $this->assertStringContainsString('/user', $redirect);
+        $this->assertStringNotContainsString('/provider', $redirect);
+    }
+
+    // -----------------------------------------------------------------
+    // 概览：在线服务器数量（首屏）
+    // -----------------------------------------------------------------
+
+    public function test_概览页首屏就显示在线服务器数量(): void
+    {
+        [$provider, $online, $account] = $this->makeTenant();
+
+        $online->update(['status' => 'active', 'last_seen_at' => now()->subMinute()]);
+
+        // 再造一台掉线的服务器
+        ProviderNode::create([
+            'provider_id' => $provider->id,
+            'node_code' => 'offline-01',
+            'name' => '掉线节点',
+            'host' => 'offline.example.com',
+            'port' => 443,
+            'status' => 'active',
+            'last_seen_at' => now()->subHours(3),
+        ]);
+
+        $html = $this->actingAs($account, 'provider')
+            ->get('/provider/'.$provider->code)
+            ->assertOk()
+            ->getContent();
+
+        // 首屏（非懒加载）就必须有统计卡，否则服务商看到的是骨架屏
+        $this->assertStringContainsString('fi-wi-stats-overview', $html);
+        $this->assertStringContainsString('在线服务器', $html);
+        $this->assertStringContainsString('1 / 2 台', $html, '在线数量应为「10 分钟内有心跳」的节点数');
+    }
+
+    public function test_节点列表显示每台服务器的状态与今日_本月流量(): void
+    {
+        [$provider, $node, $account] = $this->makeTenant();
+
+        $node->update(['last_seen_at' => now()->subMinutes(2)]);
+
+        // 真实跑一次计费：产生 1GB 今日流量
+        $this->billOneGigabyte($this->makeUser(), $provider, $node);
+
+        $html = $this->actingAs($account, 'provider')
+            ->get('/provider/'.$provider->code.'/provider-nodes')
+            ->assertOk()
+            ->getContent();
+
+        foreach (['状态', '最近心跳', '今日流量', '本月流量', '是否在线'] as $header) {
+            $this->assertStringContainsString($header, $html, "节点列表缺少「{$header}」");
+        }
+
+        // 1 GB 上行落在今天，今日与本月都应显示 1.00 GB
+        $this->assertStringContainsString('1.00 GB', $html);
     }
 
     public function test_服务商后台所有页面都能正常打开(): void

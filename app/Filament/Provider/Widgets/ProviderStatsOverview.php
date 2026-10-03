@@ -21,6 +21,16 @@ class ProviderStatsOverview extends StatsOverviewWidget
 
     protected int|string|array $columnSpan = 'full';
 
+    /**
+     * 关掉懒加载（Filament v3.3 的 CanBeLazy 默认 $isLazy = true）。
+     *
+     * 概览卡片是打开后台第一眼要看的东西：进视口再拉的骨架屏会让服务商以为「没数据」，
+     * 也把「在线服务器数量」这类关键数字押在一次额外的 Livewire 请求上。
+     * 这里的查询都是走索引的单次聚合，首屏直接渲染代价很低。
+     * （下面的图表/表格仍保持懒加载，它们在首屏之下，按需加载更划算。）
+     */
+    protected static bool $isLazy = false;
+
     protected function getStats(): array
     {
         $providerId = (int) (Filament::getTenant()?->getKey() ?? 0);
@@ -63,8 +73,8 @@ class ProviderStatsOverview extends StatsOverviewWidget
                 ->descriptionIcon('heroicon-m-wallet')
                 ->color('primary'),
 
-            Stat::make('在线节点', $nodes['online'].' / '.$nodes['total'])
-                ->description(sprintf('正常 %d · 停用 %d · 离线 %d', $nodes['active'], $nodes['disabled'], $nodes['offline']))
+            Stat::make('在线服务器', $nodes['online'].' / '.$nodes['total'].' 台')
+                ->description(sprintf('正常 %d · 停用 %d · 离线 %d（在线=10 分钟内有心跳）', $nodes['active'], $nodes['disabled'], $nodes['offline']))
                 ->descriptionIcon('heroicon-m-signal')
                 ->color($nodes['online'] > 0 ? 'success' : 'danger'),
         ];

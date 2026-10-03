@@ -220,7 +220,7 @@ mysql -uroot -e "CREATE DATABASE hysteria_test DEFAULT CHARACTER SET utf8mb4 COL
 mysql -uroot hysteria_test < database/schema/hysteria_schema.sql
 DB_DATABASE=hysteria_test php artisan migrate
 
-php artisan test        # 73 个用例（用户后台 39 + 服务商后台 26 + 服务商主题 8）
+php artisan test        # 78 个用例（用户后台 39 + 服务商后台 31 + 服务商主题 8）
 ```
 
 | 验收项 | 用例 |
@@ -292,6 +292,22 @@ curl -s http://127.0.0.1:8088/provider/login | grep -oE 'build/assets/theme-[A-Z
    —— 平时看不出来，一旦有查询报错（Laravel 用 `substituteBindingsIntoRawSql()` 拼错误信息）
    或调用 `toRawSql()`，真实异常就会被这个次生异常盖掉，排查现场全毁。
    正确写法见 `AppServiceProvider::useMicrosecondPrecisionForMysqlBindings()`：构造后用 `setConnection($connection)`。
+
+9. **多面板共用一个 session ⇒ `url.intended` 会串台。**
+   以服务商账号登录后跳到 `/user/login`，不是权限或租户问题，是登录跳转读到了**用户面板**
+   留下的 intended。详见 [§10.5](#105-多面板共用一个-session登录跳转必须逐面板收口)：
+   两个面板各有一个只覆盖跳转的登录页，只认自己路径下的 intended。
+
+10. **`selectSub()` 会让 Eloquent 的默认 `select *` 失效。**
+    `Query\Builder::$columns` 从 null 变成非空后，`get()` 不再补 `*`，
+    模型拿不到 `id` → Filament 列表页直接 500
+    （报 `getTableRecordKey(): Return value must be of type string, null returned`）。
+    给列表加聚合子查询时，必须显式 `->select(['表名.*'])->selectSub(...)`。
+
+11. **Filament v3.3 的 Widget 默认懒加载**（`CanBeLazy::$isLazy = true`）：
+    首屏 HTML 里只有骨架屏，数字要等组件进视口后由 Livewire 再拉一次。
+    概览卡片这种「第一眼就要看」的数字，建议 `protected static bool $isLazy = false;`
+    —— 否则自动化验收断言不到内容（本次就是这样漏掉了「概览不显示在线服务器数量」）。
 
 ---
 
@@ -405,7 +421,7 @@ php artisan optimize:clear             # ✓
 | 移动端侧边栏与表格 | ✓ `sidebarCollapsibleOnDesktop()` + 表格 `min-width:640px` 横向滚动 + `hv-grid` 单列堆叠 |
 | `npm run build` 无错误 | ✓ exit 0 |
 | user 面板主题不影响其它面板 | ✓ 主题仅注册在 user panel（有测试断言） |
-| 注册/买积分/切换服务商/看流量/看账单 | ✓ 73 个用例全绿（见 §5） |
+| 注册/买积分/切换服务商/看流量/看账单 | ✓ 78 个用例全绿（见 §5） |
 
 ---
 
@@ -479,8 +495,8 @@ git checkout master && git merge chore/laravel-12 && composer install
 
 | 分组 | 页面 | 写权限 |
 |---|---|---|
-| 概览 | Dashboard：今日/本月流量、本月应得 Points、余额、在线节点数 + 30 天流量趋势 + 收益趋势 + 最近流水/账单 | — |
-| 节点管理 | 节点列表 / 详情 / 新增 / 编辑；行内动作：测试连通性、重新生成密钥、启用/维护/停用/下线、查看（明文）节点配置 | 可增可改，**不可删**（节点承载历史账单） |
+| 概览 | Dashboard：今日/本月流量、本月应得 Points、余额、**在线服务器数量（首屏直接渲染，非懒加载）** + 30 天流量趋势 + 收益趋势 + 最近流水/账单 | — |
+| 节点管理 | 节点列表 / 详情 / 新增 / 编辑；**列表含每台服务器的状态、最近心跳、今日流量、本月流量**，以及「是否在线」筛选；行内动作：测试连通性、重新生成密钥、启用/维护/停用/下线、查看（明文）节点配置 | 可增可改，**不可删**（节点承载历史账单） |
 | 定价管理 | 定价规则列表 + 新增定价（改价） | 只能**新增版本**；不可编辑/删除；未生效的可作废 |
 | 流量与用户 | 流量用量、流量原始明细、我的用户、用户流量排行 Top 20 | 全只读 |
 | 收益 | 我的 Points（卡片）、Points 流水、计费明细 | 全只读 |
@@ -505,7 +521,58 @@ git checkout master && git merge chore/laravel-12 && composer install
    服务商 API 密钥（`providers.api_secret_encrypted`）都用 `Crypt` 加密存储；
    页面永远只显示「首4位+8个星号+末4位」，明文只在「新建 / 重新生成」那一刻弹一次通知。
 
-### 10.5 独立主题与顶栏标识
+### 10.5 多面板共用一个 session：登录跳转必须逐面板收口
+
+**真实 bug（已在真实环境复现并修复）**：以服务商账号登录后，被错误地送到 `/user/login`。
+
+成因：Filament 的登录响应是 `redirect()->intended(Filament::getUrl())`，
+而 `url.intended` 是**整个 session 的键**，用户中心与服务商后台共用同一个 session：
+
+```
+浏览器先访问 /user（未登录）           → 用户面板把 url.intended 记成 /user
+浏览器到 /provider/xinglian 登录        → 登录成功
+redirect()->intended(...)             → 命中残留的 /user（跨面板串台）
+→ GET /user                           → 用户面板要求用户端登录 → 302 /user/login
+```
+
+数据没有任何串台，纯粹是**跳转目标**被另一个面板的 intended 带走了 —— 但它伪装成
+「服务商后台把人踢去了用户端」，很容易误判成权限/租户问题。
+
+修复：两个面板各自有一个只覆盖跳转的登录页
+（`App\Filament\Provider\Pages\Auth\Login` / `App\Filament\User\Pages\Auth\Login`）：
+
+```php
+public function authenticate(): ?LoginResponse
+{
+    $response = parent::authenticate();
+
+    if ($response === null) { return null; }
+
+    // 只保留落在本面板路径下的 intended（面板内深链接仍生效），外面板残留的一律清掉
+    $intended = session()->get('url.intended');
+    $panelPath = '/'.trim((string) Filament::getCurrentPanel()->getPath(), '/');
+    $intendedPath = is_string($intended) ? (string) parse_url($intended, PHP_URL_PATH) : '';
+
+    if ($intendedPath === '' || ! str_starts_with($intendedPath, $panelPath)) {
+        session()->forget('url.intended');
+    }
+
+    return $response;
+}
+```
+
+复现/验收方式（**必须走真实 Livewire 端点**，`Livewire::test()` 会免掉 persistent middleware
+与真实 HTTP 语义，把这类问题掩盖掉）：
+
+```
+GET  /user            → 302 /user/login（session 记下 url.intended=/user）
+GET  /provider/login  → 200（取 wire:snapshot）
+POST /livewire/update → calls=[authenticate]（updates 里带 email/password）
+        修复前 effects.redirect = http://host/user   → 跟随后 302 /user/login ❌
+        修复后 effects.redirect = http://host/provider/xinglian → 200 ✅
+```
+
+### 10.6 独立主题与顶栏标识
 
 服务商后台有**自己的一份 vite 主题**（`resources/css/filament/provider/theme.css`，
 产物 `theme-DZ4iLoAc.css`），与用户中心那份完全独立：主色 Teal、圆角更小、
@@ -513,16 +580,19 @@ git checkout master && git merge chore/laravel-12 && composer install
 `ProviderPanelProvider` 还通过 `PanelsRenderHook::TOPBAR_START` 在顶栏常驻一个
 「服务商后台」标识（`.hv-ops-badge`）—— 防的是"在管收益的界面里用用户中心的心智去点"。
 
-### 10.6 服务商后台验收
+### 10.7 服务商后台验收
 
 ```bash
-php artisan test tests/Feature/ProviderPanelTest.php       # 26 个用例（业务与隔离）
+php artisan test tests/Feature/ProviderPanelTest.php       # 31 个用例（业务与隔离）
 php artisan test tests/Feature/ProviderPanelThemeTest.php  # 8 个用例（主题 / 品牌 / 双面板不串台）
 ```
 
 | 验收项 | 用例要点 |
 |---|---|
 | 能登录 | 邮箱密码走 Filament 登录页真登录（独立 guard）；密码错误被拒；`/provider` 302 → `/provider/login`；登录后 302 → `/provider/{code}` |
+| 登录跳转不被劫持 | 真实 Livewire 端点提交：用户面板残留的 `url.intended=/user` 不再把服务商带走（跳转仍是 `/provider/...`）；本面板深链接的 intended 仍生效 |
+| 概览首屏 | `/provider/{code}` 首屏 HTML 就含统计卡与「在线服务器 x / y 台」（10 分钟内有心跳计入在线） |
+| 节点状态与流量 | 节点列表含 状态 / 最近心跳 / 今日流量 / 本月流量 + 「是否在线」筛选；造 1GB 流量后列表显示 `1.00 GB` |
 | 能加节点 | `CreateNodeAction` 生成密钥且密文落库（明文不落库）；同服务商 host:port 重复被拒；不同服务商允许同地址 |
 | 能改定价 | 新增即截断旧规则且旧价不变；区间落在既有规则内部被拒；未来时间排期生效且当前仍命中旧价 |
 | 能看流量/收益 | 19 个页面全部 200；节点列表/计费明细只显示自己的记录（Livewire 表格断言） |

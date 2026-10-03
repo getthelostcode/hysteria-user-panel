@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Provider\Pages\Auth\Login;
 use App\Filament\Provider\Pages\Dashboard;
 use App\Filament\Provider\Pages\Settings\ChangePassword;
 use App\Filament\Provider\Pages\Settings\ManageApiCredentials;
@@ -54,7 +55,8 @@ class ProviderPanelProvider extends PanelProvider
 
             // ---- 认证：独立 guard，只注册登录（邮箱验证/密码重置可在平台配好 MAIL_* 后打开）----
             ->authGuard('provider')
-            ->login()
+            // 自定义登录页：只拦截「登录后跳转」，避免用户面板残留的 url.intended 把服务商带走
+            ->login(Login::class)
 
             // ---- 多租户：租户 = 服务商，URL 用 provider.code（唯一）----
             ->tenant(Provider::class, slugAttribute: 'code')
