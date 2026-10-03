@@ -22,6 +22,8 @@ use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Enums\MaxWidth;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\View\View;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -63,8 +65,15 @@ class ProviderPanelProvider extends PanelProvider
             ->darkModeBrandLogo(ProviderPanelTheme::LOGO_DARK)
             ->brandLogoHeight(ProviderPanelTheme::LOGO_HEIGHT)
             ->favicon(ProviderPanelTheme::FAVICON)
+            ->viteTheme(ProviderPanelTheme::VITE_THEME)   // 独立主题，只作用于本面板
             ->colors(ProviderPanelTheme::colors())
             ->darkMode(isForced: false)
+
+            // ---- 顶栏常驻标识：提醒「这里是服务商后台」（动的是钱，不是自己的流量） ----
+            ->renderHook(
+                PanelsRenderHook::TOPBAR_START,
+                fn (): View => view('filament.provider.topbar-badge'),
+            )
 
             // ---- 布局 ----
             ->maxContentWidth(MaxWidth::Full)

@@ -1,0 +1,194 @@
+/* ==========================================================================
+   Hysteria VPN 服务商后台 · Filament v3 独立主题
+   —— 通过 ProviderPanelProvider::viteTheme() 注册，**只作用于 provider 面板**；
+   —— 不修改 vendor/filament 任何文件；平台后台 / 用户中心各有自己的主题，互不影响。
+   —— 构建：npm run build（产物在 public/build，由 Vite manifest 管理）
+   —— 主色不写死在这里：由 ProviderPanelTheme::colors() 注入 --primary-*（Teal），
+      本文件只做「结构 / 密度 / 组件」层面的定制，换色不用改 CSS。
+   ========================================================================== */
+
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@config 'tailwind.config.js';
+
+/* --------------------------------------------------------------------------
+   设计令牌：圆角、阴影、间距统一在这里改，页面里不再各写一套
+   -------------------------------------------------------------------------- */
+@layer base {
+    :root {
+        /* 服务商后台信息密度更高（金额、费率快照、状态列多），圆角略小一点更利落 */
+        --hv-radius-card: 0.75rem;
+        --hv-radius-chip: 9999px;
+        --hv-gap: 1.25rem;
+        --hv-shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 12px 32px -20px rgb(15 23 42 / 0.26);
+        --hv-shadow-card-hover: 0 2px 4px 0 rgb(15 23 42 / 0.05), 0 18px 40px -24px rgb(15 23 42 / 0.34);
+        /* 顶栏「服务商后台」标识的左侧主色竖条宽度 */
+        --hv-accent-bar: 3px;
+    }
+
+    /* 暗黑模式下的阴影需要更"实"一点，否则卡片边界看不清 */
+    .dark {
+        --hv-shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.45), 0 14px 36px -22px rgb(0 0 0 / 0.85);
+        --hv-shadow-card-hover: 0 2px 6px 0 rgb(0 0 0 / 0.5), 0 20px 44px -24px rgb(0 0 0 / 0.9);
+    }
+}
+
+@layer components {
+    /* ---- 卡片：圆角 / 阴影 / 悬浮反馈 统一 ---- */
+    .fi-section,
+    .fi-wi-stats-overview-stat,
+    .fi-ta-ctn,
+    .fi-wi-chart,
+    .fi-wi-table {
+        border-radius: var(--hv-radius-card);
+        box-shadow: var(--hv-shadow-card);
+        transition: box-shadow 0.2s ease;
+    }
+
+    .fi-wi-stats-overview-stat:hover {
+        box-shadow: var(--hv-shadow-card-hover);
+    }
+
+    /* ---- 统计卡：左侧主色竖条 ----
+       服务商后台与用户中心在视觉上必须一眼可分：
+       服务商进来第一眼就知道"我在管节点和收益，不是在用流量"。 */
+    .fi-wi-stats-overview-stat {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .fi-wi-stats-overview-stat::before {
+        content: '';
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: 0;
+        width: var(--hv-accent-bar);
+        background: rgb(var(--primary-500));
+        opacity: 0.9;
+    }
+
+    /* ---- 指标数字：等宽数字，刷新时不会左右跳动 ---- */
+    .fi-wi-stats-overview-stat-value,
+    .hv-amount {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+    }
+
+    .fi-wi-stats-overview-stat-label {
+        font-weight: 500;
+    }
+
+    /* 金额/Points 列统一右对齐等宽（账单、流水、结算明细都用它） */
+    .hv-amount {
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    /* ---- 表格：列多，小屏横向滚动而不是挤压 ----
+       服务商侧表格常见 8~10 列（时间/节点/用户/上下行/费率快照/抽成/应得/状态），
+       比用户中心宽，min-width 相应调大。 */
+    .fi-ta-content {
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .fi-ta-table {
+        min-width: 720px;
+    }
+
+    .fi-ta-table td,
+    .fi-ta-table th {
+        white-space: nowrap;
+    }
+
+    /* ---- 代码块：节点服务端配置（可复制粘贴） ---- */
+    .hv-code {
+        @apply overflow-x-auto rounded-xl border border-white/10 bg-gray-950 p-4 text-xs leading-relaxed text-gray-100;
+        font-variant-ligatures: none;
+        white-space: pre;
+    }
+
+    .dark .hv-code {
+        @apply border-white/10 bg-black/70;
+    }
+
+    /* ---- 顶栏标识：服务商后台 ---- */
+    .hv-ops-badge {
+        @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold;
+        @apply bg-primary-50 text-primary-700 ring-1 ring-primary-600/20;
+        @apply dark:bg-primary-500/10 dark:text-primary-300 dark:ring-primary-400/20;
+        letter-spacing: 0.01em;
+    }
+
+    .hv-ops-badge svg {
+        @apply h-3.5 w-3.5;
+    }
+
+    /* ---- 通用卡片栅格：默认单列，md 起分列 ---- */
+    .hv-grid {
+        display: grid;
+        gap: var(--hv-gap);
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    @media (min-width: 768px) {
+        .hv-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .hv-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .hv-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+
+    /* ---- 指标块 ---- */
+    .hv-metric {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    .hv-metric-label {
+        @apply text-sm text-gray-500 dark:text-gray-400;
+    }
+
+    .hv-metric-unit {
+        @apply ml-1 text-xs font-normal text-gray-400;
+    }
+
+    /* ---- 状态徽章：颜色 + 图标 + 文字三重表达（不允许只靠颜色） ---- */
+    .fi-badge .fi-badge-icon {
+        @apply h-4 w-4;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   移动端适配：单列堆叠、侧边栏与工具栏不溢出
+   -------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+    .fi-wi-stats-overview-stats-ctn {
+        gap: 0.75rem;
+    }
+
+    .fi-wi-stats-overview-stat {
+        padding: 1rem;
+    }
+
+    .fi-section {
+        padding: 1rem;
+    }
+
+    .fi-header {
+        gap: 0.75rem;
+    }
+
+    .fi-ta-header-toolbar {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    /* 移动端图表高度收紧，避免占满整屏 */
+    .fi-wi-chart-canvas-ctn {
+        min-height: 220px;
+    }
+
+    /* 小屏顶栏太挤，标识只保留图标 */
+    .hv-ops-badge-label {
+        display: none;
+    }
+}

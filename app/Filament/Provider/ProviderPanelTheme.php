@@ -23,6 +23,16 @@ final class ProviderPanelTheme
     public const FAVICON = '/images/brand/user-favicon.svg';
     public const LOGO_HEIGHT = '2rem';
 
+    /**
+     * 构建产物目录（vite build 输出）。
+     * 与 user 面板各自一份主题：服务商后台的表格更宽、圆角更小、统计卡带主色竖条，
+     * 且顶栏常驻「服务商后台」标识 —— 两个面板在视觉上必须一眼可分。
+     */
+    public const VITE_THEME = 'resources/css/filament/provider/theme.css';
+
+    /** 顶栏标识文案（RenderHook 注入，测试也断言它） */
+    public const TOPBAR_BADGE = '服务商后台';
+
     /** 语义色板（全部用 Filament 内置语义色，不写死十六进制） */
     public static function colors(): array
     {

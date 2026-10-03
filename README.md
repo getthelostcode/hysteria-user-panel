@@ -189,7 +189,7 @@ mysql -uroot -e "CREATE DATABASE hysteria_test DEFAULT CHARACTER SET utf8mb4 COL
 mysql -uroot hysteria_test < database/schema/hysteria_schema.sql
 DB_DATABASE=hysteria_test php artisan migrate
 
-php artisan test        # 65 个用例（用户后台 39 + 服务商后台 26）
+php artisan test        # 73 个用例（用户后台 39 + 服务商后台 26 + 服务商主题 8）
 ```
 
 | 验收项 | 用例 |
@@ -256,8 +256,11 @@ curl -s  http://127.0.0.1:8088/provider/login | grep -c '服务商后台'
 
 ---
 
-## 7. 独立主题（Theme）与品牌
+## 7. 独立主题（Theme）与品牌（用户中心 / 服务商后台各一份）
 
+两个面板各有一份**独立主题**：`resources/css/filament/user/theme.css` 与
+`resources/css/filament/provider/theme.css`，各自编译成一份产物，互不加载
+（`test_注册了独立主题_且不在其它面板生效` / `test_注册了独立主题_且与用户中心各自一份` 守着这件事）。
 用 Filament v3 原生主题机制，**不修改 `vendor/filament` 任何文件**：
 
 ```bash
@@ -297,6 +300,38 @@ php artisan optimize:clear
 
 **主题隔离**：`viteTheme` 挂在 panel 上，只有 user 面板会加载该 CSS；平台后台、服务商后台各自有独立 Panel 与主题，互不影响（测试 `test_注册了独立主题_且不在其它面板生效` 断言了这一点）。
 
+### 服务商后台主题（跟用户中心刻意区分）
+
+服务商后台动的是**钱和节点**，用户中心动的是自己的流量。两者功能相似、后果完全不同，
+所以视觉上必须一眼可分，而不是"同一个后台换个入口"：
+
+| 项 | 用户中心 | 服务商后台 |
+|---|---|---|
+| 主色 | `primary=Indigo` | `primary=Teal` |
+| 圆角 | `--hv-radius-card: 1rem` | `0.75rem`（服务商侧信息密度更高） |
+| 统计卡 | 常规卡片 | 左侧一条主色竖条（`--hv-accent-bar`） |
+| 表格 | `min-width: 640px` | `min-width: 720px`（金额/费率快照/状态列更多） |
+| 数字 | 等宽 | 等宽 + `.hv-amount`（右对齐不换行） |
+| 专属组件 | `.hv-code` / `.hv-grid` / `.hv-metric*` | 同左 + `.hv-ops-badge`（顶栏标识） |
+| 构建产物 | `theme-D6ehCEXT.css` 112.85 kB | `theme-DZ4iLoAc.css` 112.90 kB |
+
+顶栏常驻「服务商后台」标识：`ProviderPanelProvider` 用
+
+```php
+->renderHook(PanelsRenderHook::TOPBAR_START, fn (): View => view('filament.provider.topbar-badge'))
+```
+
+注入 `resources/views/filament/provider/topbar-badge.blade.php`（样式 `.hv-ops-badge`，小屏只留图标）。
+它的作用是"防误操作"：服务商后台也有一堆看起来很熟的卡片和表格，若不标明场景，
+很容易在"管收益"的界面里按用户中心的心智去点。
+
+> **加第二个面板主题的两个必改点**（漏了会出现"样式突然缺失"）：
+> 1. `vite.config.js` 的 `input` 要加新主题入口（否则 `viteTheme` 指向的文件不在 manifest 里，页面直接报错）；
+> 2. 新主题目录要有配套 `tailwind.config.js`，`content` 覆盖 `./app/Filament/Provider/**/*.php`、
+>    `./resources/views/filament/provider/**/*.blade.php` 与 `./vendor/filament/**/*.blade.php`
+>    —— 自定义 Blade 里写的 Tailwind 类只有在 content 里才会被编译（本次的 `max-h-96`、`bg-danger-50` 就属于这类）。
+> 最后 `npm run build`，并核对 manifest 里两份产物文件名不同、且互相不含对方的专属类。
+
 **构建产物实测**
 
 ```
@@ -331,7 +366,7 @@ php artisan optimize:clear             # ✓
 | 移动端侧边栏与表格 | ✓ `sidebarCollapsibleOnDesktop()` + 表格 `min-width:640px` 横向滚动 + `hv-grid` 单列堆叠 |
 | `npm run build` 无错误 | ✓ exit 0 |
 | user 面板主题不影响其它面板 | ✓ 主题仅注册在 user panel（有测试断言） |
-| 注册/买积分/切换服务商/看流量/看账单 | ✓ 65 个用例全绿（见 §5） |
+| 注册/买积分/切换服务商/看流量/看账单 | ✓ 73 个用例全绿（见 §5） |
 
 ---
 
@@ -431,10 +466,19 @@ git checkout master && git merge chore/laravel-12 && composer install
    服务商 API 密钥（`providers.api_secret_encrypted`）都用 `Crypt` 加密存储；
    页面永远只显示「首4位+8个星号+末4位」，明文只在「新建 / 重新生成」那一刻弹一次通知。
 
-### 10.5 服务商后台验收
+### 10.5 独立主题与顶栏标识
+
+服务商后台有**自己的一份 vite 主题**（`resources/css/filament/provider/theme.css`，
+产物 `theme-DZ4iLoAc.css`），与用户中心那份完全独立：主色 Teal、圆角更小、
+统计卡带主色竖条、表格 `min-width: 720px`（详见 §7）。
+`ProviderPanelProvider` 还通过 `PanelsRenderHook::TOPBAR_START` 在顶栏常驻一个
+「服务商后台」标识（`.hv-ops-badge`）—— 防的是"在管收益的界面里用用户中心的心智去点"。
+
+### 10.6 服务商后台验收
 
 ```bash
-php artisan test tests/Feature/ProviderPanelTest.php    # 26 个用例
+php artisan test tests/Feature/ProviderPanelTest.php       # 26 个用例（业务与隔离）
+php artisan test tests/Feature/ProviderPanelThemeTest.php  # 8 个用例（主题 / 品牌 / 双面板不串台）
 ```
 
 | 验收项 | 用例要点 |
@@ -445,4 +489,5 @@ php artisan test tests/Feature/ProviderPanelTest.php    # 26 个用例
 | 能看流量/收益 | 19 个页面全部 200；节点列表/计费明细只显示自己的记录（Livewire 表格断言） |
 | 能发起结算 | 结算单/明细/账本/钱包四件套 + `settlement_id` 回写；未达起结门槛被拒；冻结期内被拒；同区间不能重复结算 |
 | 数据隔离 | 跨租户 403/404；别人的节点详情 404；Policy 断言「账本/计费/流量/绑定一律不可写」 |
+| 主题与品牌 | provider 面板注册独立主题（与 user 不同文件）；品牌/语义色/暗黑模式；顶栏「服务商后台」标识只在 provider 出现；两份构建产物互不含对方的专属类 |
 | 停用账号 | `canAccessPanel()=false` → 403 |
